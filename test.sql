@@ -147,94 +147,124 @@ CREATE TABLE IsAddedTo (
     customerId INT NOT NULL,
     VIN CHAR(17) NOT NULL,
     cost DECIMAL(10,2) CHECK (cost > 0),
-    PRIMARY KEY (optionId, saleDate, customerId, VIN),
+    PRIMARY KEY (optionId, saleDate, customerId),
     FOREIGN KEY (optionId) REFERENCES AfterMarketOption(optionId),
-    FOREIGN KEY (customerId, saleDate, VIN) REFERENCES Sale(customerId, saleDate, saleVIN)
+    FOREIGN KEY (customerId, saleDate) REFERENCES Sale(customerId, saleDate),
+    FOREIGN KEY (VIN) REFERENCES NewVehicle(VIN)    
 );
 
 -- Need to constrain the maximum IsAddedTo count per sale to 8
-CREATE TRIGGER checkMaxOptions
-BEFORE INSERT ON IsAddedTo
-FOR EACH ROW
+CREATE OR REPLACE FUNCTION check_max_options_func()
+RETURNS TRIGGER AS $$
+DECLARE
+  option_count INT;
 BEGIN
-  DECLARE option_count INT;
-  SELECT COUNT(*)
+  SELECT COUNT(*) 
     INTO option_count
     FROM IsAddedTo
-    WHERE saleDate = NEW.saleDate
-      AND customerId = NEW.customerId
-      AND VIN = NEW.VIN;
+    WHERE "saleDate" = NEW."saleDate"
+    AND "customerId" = NEW."customerId";
+
   IF option_count >= 8 THEN
     RAISE EXCEPTION 'Cannot add more than 8 AfterMarketOptions per Sale.';
   END IF;
+
+  RETURN NEW;
 END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER checkMaxOptions
+BEFORE INSERT ON IsAddedTo
+FOR EACH ROW
+EXECUTE FUNCTION check_max_options_func();
 
 -- Constrain the addition of Aftermarket options to vehicles without pre_owner attribute
 -- We have a seperate new vehicle table with just new vehicles so we can do a lookup to see if the sale's vin exists in that table
 -- If not, we prevent the insert
+CREATE OR REPLACE FUNCTION check_new_vehicle_only_func()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM NewVehicle
+    WHERE "VIN" = NEW."VIN"
+  ) THEN
+    RAISE EXCEPTION 'AfterMarketOptions are only allowed for new-vehicle Sales.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TRIGGER checkNewVehicleOnly
 BEFORE INSERT ON IsAddedTo
 FOR EACH ROW
-BEGIN
-  IF NOT EXISTS (
-      SELECT 1
-        FROM NewVehicle        
-       WHERE VIN = NEW.VIN
-    )
-  THEN
-    RAISE EXCEPTION 'AfterMarketOptions are only allowed for new-vehicle Sales.'
-  END IF;
-END;
+EXECUTE FUNCTION check_new_vehicle_only_func();
 
 -- To ensure the above trigger works consistently (checkNewVehicleOnly), we need to ensure any new sold vehicles are removed from the new vehicle table to the previous owned table
 -- We are assuming here that the dealership still wants to record a history of sold vehicles (as opposed to just deleting from the db)
 -- We can add pre_owned here also
-CREATE TRIGGER trig_move_new_vehicle_to_preowned
-AFTER INSERT OR UPDATE ON "Sale"
-FOR EACH ROW
+CREATE OR REPLACE FUNCTION trig_move_new_vehicle_to_preowned_func()
+RETURNS TRIGGER AS $$
 BEGIN
-  -- Only run if the Sale is now sold (newly sold or inserted as sold).
-  IF NEW.soldStatus = TRUE THEN  
-    -- Check if the sold VIN is currently in NewVehicle
+  -- Only run if the Sale is newly sold or updated to sold.
+  IF NEW."soldStatus" = TRUE THEN
     IF EXISTS (
       SELECT 1
-      FROM "NewVehicle"
-      WHERE VIN = NEW.saleVIN
+      FROM NewVehicle
+      WHERE "VIN" = NEW."saleVIN"
     ) THEN
       -- Remove from NewVehicle
-      DELETE FROM "NewVehicle"
-      WHERE VIN = NEW.saleVIN;       
-      -- Insert into PreownedVehicle. We must provide a NOT NULL pre_owner (as previous owner was Dealership, we can use this).
-      INSERT INTO "PreownedVehicle"(VIN, pre_owner)
-      VALUES (NEW.saleVIN, 'Dealership');
+      DELETE FROM NewVehicle
+      WHERE "VIN" = NEW."saleVIN";
+
+      -- Insert into PreownedVehicle
+      INSERT INTO PreownedVehicle ("VIN", "pre_owner")
+      VALUES (NEW."saleVIN", 'Dealership');
     END IF;
   END IF;
+
+  RETURN NEW;
 END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trig_move_new_vehicle_to_preowned
+AFTER INSERT OR UPDATE ON Sale
+FOR EACH ROW
+EXECUTE FUNCTION trig_move_new_vehicle_to_preowned_func();
 
 -- Trigger to add tradedInVehicle to preowned with insert of Sale (referencing line from assignment description -> 'We assume that once the vehicle is traded in, it will be put on sale immediately')
 -- Here we assume that on sale, we want to move the tradedInVehicle into the pre_owned vehicle list (be we ensure to only do that if not already present, i.e. in the case it was moved on insert and then an update retriggers logic)
 -- We trigger on insert and sale in the edge case that a sale record is updated at a later stage to include the tradedInVehicle
 -- We also assume that the dealership wants to maintain a record of tradedInVehicles (i.e. instead of deleting them from the db)
-CREATE TRIGGER trig_add_traded_in_vehicle_to_preowned
-AFTER INSERT OR UPDATE ON "Sale"
-FOR EACH ROW
+CREATE OR REPLACE FUNCTION trig_add_traded_in_vehicle_to_preowned_func()
+RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.tradedInVIN IS NOT NULL THEN
-    -- If not in PreownedVehicle, add it
+  IF NEW."tradedInVIN" IS NOT NULL THEN
+    -- If it's not already in PreownedVehicle, insert it
     IF NOT EXISTS (
-      SELECT 1
-      FROM "PreownedVehicle"
-      WHERE VIN = NEW.tradedInVIN
+      SELECT 1 
+      FROM PreownedVehicle
+      WHERE "VIN" = NEW."tradedInVIN"
     ) THEN
-      INSERT INTO "PreownedVehicle"(VIN, pre_owner)
-      SELECT t.VIN, t.registeredName
-      FROM "TradedInVehicle" t
-      WHERE t.VIN = NEW.tradedInVIN;
-      -- Mark the traded-in vehicle as unsold
-      -- This is a vehicle table attribute so needs to be updated their and not in the PreownedVehicle table
-      UPDATE "Vehicle"
-      SET soldStatus = false
-      WHERE VIN = NEW.tradedInVIN;
+      -- Insert the newly traded-in vehicle into PreownedVehicle
+      INSERT INTO PreownedVehicle ("VIN", "pre_owner")
+        SELECT t."VIN", t."registeredName"
+        FROM TradedInVehicle t
+        WHERE t."VIN" = NEW."tradedInVIN";
+
+      -- Update the master Vehicle table to set that VIN as unsold
+      UPDATE Vehicle
+      SET "soldStatus" = false
+      WHERE "VIN" = NEW."tradedInVIN";
     END IF;
   END IF;
+
+  RETURN NEW;
 END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trig_add_traded_in_vehicle_to_preowned
+AFTER INSERT OR UPDATE ON Sale
+FOR EACH ROW
+EXECUTE FUNCTION trig_add_traded_in_vehicle_to_preowned_func();
