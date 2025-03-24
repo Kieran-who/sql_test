@@ -80,8 +80,8 @@ CREATE TABLE ImageGallery (
 CREATE TABLE Sale (
     customerId INT NOT NULL,
     saleDate DATE NOT NULL,
-    saleVIN VARCHAR(17) NOT NULL,
-    tradedInVIN VARCHAR(17),
+    saleVIN CHAR(17) NOT NULL,
+    tradedInVIN CHAR(17),
     salesPersonId INT NOT NULL,
     discountPrice DECIMAL(8,0) CHECK (discountPrice > 0),
     basePrice DECIMAL(8,0) CHECK (basePrice > 0),
@@ -130,7 +130,7 @@ CREATE TABLE IsAddedTo (
     optionId INT NOT NULL,
     saleDate DATE NOT NULL,
     customerId INT NOT NULL,
-    VIN VARCHAR(17) NOT NULL,
+    VIN CHAR(17) NOT NULL,
     cost DECIMAL(10,2) CHECK (cost > 0),
     PRIMARY KEY (optionId, saleDate, customerId, VIN),
     FOREIGN KEY (optionId) REFERENCES AfterMarketOption(optionId),
@@ -139,7 +139,7 @@ CREATE TABLE IsAddedTo (
 
 -- TestDrive
 CREATE TABLE TestDrive (
-    VIN VARCHAR(17) NOT NULL,
+    VIN CHAR(17) NOT NULL,
     customerId INT NOT NULL,
     salesPersonId INT NOT NULL,
     testDriveDate DATE NOT NULL,
