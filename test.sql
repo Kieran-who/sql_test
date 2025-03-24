@@ -28,7 +28,7 @@ CREATE TABLE Customer (
     street VARCHAR(100) NOT NULL,
     city VARCHAR(50) NOT NULL,
     state VARCHAR(50) NOT NULL,
-    postcode VARCHAR(10) NOT NULL, -- Whats the max postcode length we ccan think might be possible?
+    postcode CHAR(4) NOT NULL, -- Aus post codes are 4 digits
     country CHAR(2) NOT NULL -- assumed we can just use 2 digit country codes here??
 );
 
