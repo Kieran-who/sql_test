@@ -142,10 +142,10 @@ CREATE TABLE TestDrive (
     VIN CHAR(17) NOT NULL,
     customerId INT NOT NULL,
     salesPersonId INT NOT NULL,
-    date DATE NOT NULL,
-    time TIME NOT NULL,
+    testDate DATE NOT NULL,
+    testTime TIME NOT NULL,
     feedback VARCHAR(255),
-    PRIMARY KEY (VIN, date, time),
+    PRIMARY KEY (VIN, testDate, testTime),
     FOREIGN KEY (VIN) REFERENCES Vehicle(VIN),
     FOREIGN KEY (customerId) REFERENCES Customer(pid),
     FOREIGN KEY (salesPersonId) REFERENCES SalesPerson(pid)
