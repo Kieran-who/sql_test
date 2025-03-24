@@ -34,7 +34,7 @@ CREATE TABLE Customer (
 
 -- Vehicle (supertype)
 CREATE TABLE Vehicle (
-    VIN VARCHAR(17) NOT NULL PRIMARY KEY,
+    VIN CHAR(17) NOT NULL PRIMARY KEY,
     make VARCHAR(50) NOT NULL,
     model VARCHAR(50) NOT NULL,
     year INT NOT NULL,
@@ -48,20 +48,20 @@ CREATE TABLE Vehicle (
 
 -- NewVehicle (subtype of Vehicle)
 CREATE TABLE NewVehicle (
-    VIN VARCHAR(17) NOT NULL PRIMARY KEY,
+    VIN CHAR(17) NOT NULL PRIMARY KEY,
     FOREIGN KEY (VIN) REFERENCES Vehicle(VIN)
 );
 
 -- PreownedVehicle (subtype of Vehicle)
 CREATE TABLE PreownedVehicle (
-    VIN VARCHAR(17) NOT NULL PRIMARY KEY,
+    VIN CHAR(17) NOT NULL PRIMARY KEY,
     FOREIGN KEY (VIN) REFERENCES Vehicle(VIN),
     pre_owner VARCHAR(100) NOT NULL
 );
 
 -- TradedInVehicle (subtype of PreownedVehicle)
 CREATE TABLE TradedInVehicle (
-    VIN VARCHAR(17) NOT NULL PRIMARY KEY,
+    VIN CHAR(17) NOT NULL PRIMARY KEY,
     FOREIGN KEY (VIN) REFERENCES PreownedVehicle(VIN),
     mech_condition VARCHAR(10) CHECK (mech_condition IN ('poor', 'fair', 'good', 'excellent')),
     body_condition VARCHAR(10) CHECK (body_condition IN ('poor', 'fair', 'good', 'excellent')),
