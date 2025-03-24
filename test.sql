@@ -24,12 +24,12 @@ CREATE TABLE Customer (
     driversLicence VARCHAR(50) NOT NULL UNIQUE, -- Didn't specify licence as PK as I believe the pk needs to be the same as the Person superclass
     apartmentNo VARCHAR(10),
     streetNo VARCHAR(10),
-    CHECK (apartmentNo IS NOT NULL OR streetNo IS NOT NULL), -- I believe this is valid sql and will ensure either an apartmentNo or streetNo is provided
+    CHECK (apartmentNo IS NOT NULL OR streetNo IS NOT NULL), -- All addresses need to have either an apartment number or street number
     street VARCHAR(100) NOT NULL,
     city VARCHAR(50) NOT NULL,
     state VARCHAR(50) NOT NULL,
     postcode VARCHAR(10) NOT NULL, -- Whats the max postcode length we ccan think might be possible?
-    country VARCHAR(2) NOT NULL -- assumed we can just use 2 digit country codes here??
+    country CHAR(2) NOT NULL -- assumed we can just use 2 digit country codes here??
 );
 
 -- Vehicle (supertype)
