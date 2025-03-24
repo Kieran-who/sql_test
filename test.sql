@@ -69,7 +69,7 @@ CREATE TABLE TradedInVehicle (
 );
 
 -- ImageGallery (stores images for a given vehicle)
-CREATE TABLE ImageGallery (
+CREATE TABLE Images (
     VIN CHAR(17) NOT NULL,
     imgLink VARCHAR(255) NOT NULL,
     PRIMARY KEY (VIN, imgLink),
