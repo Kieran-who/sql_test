@@ -78,18 +78,20 @@ CREATE TABLE Images (
 );
 
 -- TestDrive
+-- For second approach we assume the dealership will take the minimum required details for the Person superclass (email, name, mobile)
 CREATE TABLE TestDrive (
     VIN CHAR(17) NOT NULL,
     customerId INT NOT NULL,
-    -- salesPersonId can be null in the event a salesPerson is deleted from db. We still want to keep testDrive records (hence the ON DELETE SET NULL)
-    salesPersonId INT,
+    -- personId INT NOT NULL, -- if we use this approach delete customerId and uncomment this line.
+    salesPersonId INT NOT NULL,
     testDate DATE NOT NULL,
     testTime TIME NOT NULL,
     feedback VARCHAR(255),
     PRIMARY KEY (VIN, testDate, testTime),
     FOREIGN KEY (VIN) REFERENCES Vehicle(VIN),
     FOREIGN KEY (customerId) REFERENCES Customer(pid),
-    FOREIGN KEY (salesPersonId) REFERENCES SalesPerson(pid) ON DELETE SET NULL
+    -- FOREIGN KEY (personId) REFERENCES Person(pid), -- if we use this approach delete customerId FK and uncomment this line.
+    FOREIGN KEY (salesPersonId) REFERENCES SalesPerson(pid)
 );
 
 -- Sale 
@@ -302,7 +304,7 @@ FOR EACH ROW
 EXECUTE FUNCTION check_customer_has_sale();
 
 -- To ensure a customer has taken a test drive before a customer record is created.
--- UPDATE THIS IF CHANGING APPROACH TO CUSTOMER / TEST DRIVE LOGIC!!!
+-- REMOVE IF CHANGING APPROACH TO USE THE BELOW COMMENT OUT INSTEAD
 CREATE OR REPLACE FUNCTION check_customer_has_testdrive()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -326,3 +328,29 @@ AFTER INSERT OR UPDATE ON Customer
 DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW
 EXECUTE FUNCTION check_customer_has_testdrive();
+
+-- CREATE OR REPLACE FUNCTION check_person_testdrives_before_customer()
+-- RETURNS TRIGGER AS $$
+-- DECLARE
+--     testdrive_count INT;
+-- BEGIN
+--     SELECT COUNT(*)
+--       INTO testdrive_count
+--       FROM TestDrive
+--      WHERE "personId" = NEW."pid";
+
+--     IF testdrive_count = 0 THEN
+--         RAISE EXCEPTION 
+--           'Person % must have at least one TestDrive record before becoming a Customer.', 
+--           NEW."pid";
+--     END IF;
+
+--     RETURN NEW;
+-- END;
+-- $$ LANGUAGE plpgsql;
+
+-- CREATE CONSTRAINT TRIGGER cst_person_testdrives
+-- AFTER INSERT ON Customer
+-- DEFERRABLE INITIALLY DEFERRED
+-- FOR EACH ROW
+-- EXECUTE FUNCTION check_person_testdrives_before_customer();
