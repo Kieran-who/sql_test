@@ -1,4 +1,4 @@
--- TODO: test below; Add ON DELETE clauses where needed; INSERT statements with test data
+-- TODO: test below; INSERT statements with test data
 
 -- Supertype for persons
 CREATE TABLE Person (
