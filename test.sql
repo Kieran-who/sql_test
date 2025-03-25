@@ -12,7 +12,7 @@ CREATE TABLE Person (
 -- SalesPerson (subtype of Person)
 CREATE TABLE SalesPerson (
     pid INT NOT NULL PRIMARY KEY,
-    FOREIGN KEY (pid) REFERENCES Person(pid),
+    FOREIGN KEY (pid) REFERENCES Person(pid) ON DELETE CASCADE,
     grossSalary DECIMAL(10,2) CHECK (grossSalary > 0),
     commissionRate DECIMAL(5,2) CHECK (commissionRate > 0 AND commissionRate < 0.1)
     );
@@ -20,7 +20,7 @@ CREATE TABLE SalesPerson (
 -- Customer (subtype of Person)
 CREATE TABLE Customer (
     pid INT NOT NULL PRIMARY KEY,
-    FOREIGN KEY (pid) REFERENCES Person(pid),
+    FOREIGN KEY (pid) REFERENCES Person(pid) ON DELETE CASCADE,
     driversLicence VARCHAR(50) NOT NULL UNIQUE, -- Didn't specify licence as PK as I believe the pk needs to be the same as the Person superclass
     apartmentNo VARCHAR(10),
     streetNo VARCHAR(10),
@@ -49,20 +49,20 @@ CREATE TABLE Vehicle (
 -- NewVehicle (subtype of Vehicle)
 CREATE TABLE NewVehicle (
     VIN CHAR(17) NOT NULL PRIMARY KEY,
-    FOREIGN KEY (VIN) REFERENCES Vehicle(VIN)
+    FOREIGN KEY (VIN) REFERENCES Vehicle(VIN) ON DELETE CASCADE
 );
 
 -- PreownedVehicle (subtype of Vehicle)
 CREATE TABLE PreownedVehicle (
     VIN CHAR(17) NOT NULL PRIMARY KEY,
-    FOREIGN KEY (VIN) REFERENCES Vehicle(VIN),
+    FOREIGN KEY (VIN) REFERENCES Vehicle(VIN) ON DELETE CASCADE,
     pre_owner VARCHAR(100) NOT NULL
 );
 
 -- TradedInVehicle (subtype of PreownedVehicle)
 CREATE TABLE TradedInVehicle (
     VIN CHAR(17) NOT NULL PRIMARY KEY,
-    FOREIGN KEY (VIN) REFERENCES PreownedVehicle(VIN),
+    FOREIGN KEY (VIN) REFERENCES PreownedVehicle(VIN) ON DELETE CASCADE,
     mech_condition VARCHAR(10) CHECK (mech_condition IN ('poor', 'fair', 'good', 'excellent')),
     body_condition VARCHAR(10) CHECK (body_condition IN ('poor', 'fair', 'good', 'excellent')),
     tradeInValue DECIMAL(8,0) CHECK (tradeInValue > 0),
@@ -74,24 +74,27 @@ CREATE TABLE Images (
     VIN CHAR(17) NOT NULL,
     imgLink VARCHAR(255) NOT NULL,
     PRIMARY KEY (VIN, imgLink),
-    FOREIGN KEY (VIN) REFERENCES Vehicle(VIN)
+    FOREIGN KEY (VIN) REFERENCES Vehicle(VIN) ON DELETE CASCADE
 );
 
 -- TestDrive
 CREATE TABLE TestDrive (
     VIN CHAR(17) NOT NULL,
     customerId INT NOT NULL,
-    salesPersonId INT NOT NULL,
+    -- salesPersonId can be null in the event a salesPerson is deleted from db. We still want to keep testDrive records (hence the ON DELETE SET NULL)
+    salesPersonId INT,
     testDate DATE NOT NULL,
     testTime TIME NOT NULL,
     feedback VARCHAR(255),
     PRIMARY KEY (VIN, testDate, testTime),
     FOREIGN KEY (VIN) REFERENCES Vehicle(VIN),
     FOREIGN KEY (customerId) REFERENCES Customer(pid),
-    FOREIGN KEY (salesPersonId) REFERENCES SalesPerson(pid)
+    FOREIGN KEY (salesPersonId) REFERENCES SalesPerson(pid) ON DELETE SET NULL
 );
 
 -- Sale 
+-- I have set ON DELETE CASCADE for the foreign keys here as I think logically its unlikely a dealership will want to delete sale records.
+-- This means additional logic is required for deleting records of the foreign keys, I feel that should be handled by app logic
 CREATE TABLE Sale (
     customerId INT NOT NULL,
     saleDate DATE NOT NULL,
@@ -101,7 +104,7 @@ CREATE TABLE Sale (
     discountPrice DECIMAL(8,0) CHECK (discountPrice > 0),
     basePrice DECIMAL(8,0) CHECK (basePrice > 0),
     soldStatus BOOLEAN DEFAULT false, -- false: still pending sale (i.e. payment has not been finalised), true: sold        
-    PRIMARY KEY (customerId, saleDate),    
+    PRIMARY KEY (customerId, saleDate),
     FOREIGN KEY (customerId) REFERENCES Customer(pid),
     FOREIGN KEY (saleVIN) REFERENCES Vehicle(VIN),
     FOREIGN KEY (tradedInVIN) REFERENCES TradedInVehicle(VIN),
@@ -116,7 +119,7 @@ CREATE TABLE Payment (
     amount DECIMAL(10,2) CHECK (amount > 0),
     type VARCHAR(15) CHECK (type IN ('cash','credit card','bank transfer','bank financing')),
     PRIMARY KEY (customerId, saleDate, instalmentNo),
-    FOREIGN KEY (customerId, saleDate) REFERENCES Sale(customerId, saleDate)
+    FOREIGN KEY (customerId, saleDate) REFERENCES Sale(customerId, saleDate) ON DELETE CASCADE
 );
 
 -- BankLoan
@@ -130,7 +133,7 @@ CREATE TABLE BankLoan (
     loanValue DECIMAL(10,2) NOT NULL CHECK (loanValue > 0),
     proofPresented BOOLEAN DEFAULT false, -- false: proof not presented, true: proof presented
     PRIMARY KEY (customerId, saleDate),
-    FOREIGN KEY (customerId, saleDate) REFERENCES Sale(customerId, saleDate)
+    FOREIGN KEY (customerId, saleDate) REFERENCES Sale(customerId, saleDate) ON DELETE CASCADE
 );
 
 -- AfterMarketOption
@@ -149,7 +152,7 @@ CREATE TABLE IsAddedTo (
     cost DECIMAL(10,2) CHECK (cost > 0),
     PRIMARY KEY (optionId, saleDate, customerId),
     FOREIGN KEY (optionId) REFERENCES AfterMarketOption(optionId),
-    FOREIGN KEY (customerId, saleDate) REFERENCES Sale(customerId, saleDate),
+    FOREIGN KEY (customerId, saleDate) REFERENCES Sale(customerId, saleDate) ON DELETE CASCADE,
     FOREIGN KEY (VIN) REFERENCES NewVehicle(VIN)    
 );
 
