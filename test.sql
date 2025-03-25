@@ -311,22 +311,33 @@ DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW
 EXECUTE FUNCTION check_customer_has_sale();
 
+--------------------------------------------------------
 -- TEST whether associated test drive record exists
+-- TO UPDATE BASED ON HOW WE HANDLE TESTDRIVE
+-- Below example works for storing email in testDrive
+--------------------------------------------------------
 CREATE OR REPLACE FUNCTION check_person_testdrives_before_customer()
 RETURNS TRIGGER AS $$
 DECLARE
+    person_email VARCHAR(100);
     testdrive_count INT;
 BEGIN
+    -- Fetch the email of the Person row associated with the new Customer (stores as person_email var)
+    SELECT email 
+      INTO person_email
+      FROM Person
+     WHERE pid = NEW.pid;
+
+    -- Check if there's a test drive record with that email
     SELECT COUNT(*)
       INTO testdrive_count
-      FROM TestDrive td
-      JOIN Person p ON td.personId = p.pid
-     WHERE p.email = NEW.email;
+      FROM TestDrive
+     WHERE testerEmail = person_email;
 
     IF testdrive_count = 0 THEN
-        RAISE EXCEPTION 
-          'A new customer must have at least one associated TestDrive record.', 
-          NEW.email;
+        RAISE EXCEPTION
+          'Person % (email: %) must have at least one TestDrive record before becoming a Customer.', 
+           NEW.pid, person_email;
     END IF;
 
     RETURN NEW;
