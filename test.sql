@@ -82,8 +82,12 @@ CREATE TABLE Images (
 -- For second approach we assume the dealership will take the minimum required details for the Person superclass (email, name, mobile)
 CREATE TABLE TestDrive (
     VIN CHAR(17) NOT NULL,
+    ------------------------------------------------------------
+    -- TO DECIDE BEST APPROACH FOR STORING TEST DRIVER'S DETAILS
+    ------------------------------------------------------------
     -- customerId INT NOT NULL,
-    personId INT NOT NULL, -- if we use this approach delete customerId and uncomment this line.
+    -- personId INT NOT NULL,
+    -- testerEmail VARCHAR(100) NOT NULL,
     salesPersonId INT NOT NULL,
     testDate DATE NOT NULL,
     testTime TIME NOT NULL,
@@ -95,9 +99,7 @@ CREATE TABLE TestDrive (
     FOREIGN KEY (salesPersonId) REFERENCES SalesPerson(pid)
 );
 
--- Sale 
--- I have set ON DELETE CASCADE for the foreign keys here as I think logically its unlikely a dealership will want to delete sale records.
--- This means additional logic is required for deleting records of the foreign keys, I feel that should be handled by app logic
+-- Sale
 CREATE TABLE Sale (
     customerId INT NOT NULL,
     saleDate DATE NOT NULL,
@@ -309,32 +311,7 @@ DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW
 EXECUTE FUNCTION check_customer_has_sale();
 
--- To ensure a customer has taken a test drive before a customer record is created.
--- REMOVE IF CHANGING APPROACH TO USE THE BELOW COMMENT OUT INSTEAD
--- CREATE OR REPLACE FUNCTION check_customer_has_testdrive()
--- RETURNS TRIGGER AS $$
--- DECLARE
---     testdrive_count INT;
--- BEGIN
---     SELECT COUNT(*)
---       INTO testdrive_count
---       FROM TestDrive
---      WHERE "customerId" = NEW."pid";
-
---     IF testdrive_count = 0 THEN
---         RAISE EXCEPTION 'Customer % must test drive at least one vehicle.', NEW."pid";
---     END IF;
-
---     RETURN NEW;
--- END;
--- $$ LANGUAGE plpgsql;
-
--- CREATE CONSTRAINT TRIGGER cst_customer_has_testdrive
--- AFTER INSERT OR UPDATE ON Customer
--- DEFERRABLE INITIALLY DEFERRED
--- FOR EACH ROW
--- EXECUTE FUNCTION check_customer_has_testdrive();
-
+-- TEST whether associated test drive record exists
 CREATE OR REPLACE FUNCTION check_person_testdrives_before_customer()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -342,13 +319,14 @@ DECLARE
 BEGIN
     SELECT COUNT(*)
       INTO testdrive_count
-      FROM TestDrive
-     WHERE personId = NEW.pid;
+      FROM TestDrive td
+      JOIN Person p ON td.personId = p.pid
+     WHERE p.email = NEW.email;
 
     IF testdrive_count = 0 THEN
         RAISE EXCEPTION 
-          'Person % must have at least one TestDrive record before becoming a Customer.', 
-          NEW.pid;
+          'A new customer must have at least one associated TestDrive record.', 
+          NEW.email;
     END IF;
 
     RETURN NEW;
