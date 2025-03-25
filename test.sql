@@ -62,7 +62,8 @@ CREATE TABLE PreownedVehicle (
 -- TradedInVehicle (subtype of PreownedVehicle)
 CREATE TABLE TradedInVehicle (
     VIN CHAR(17) NOT NULL PRIMARY KEY,
-    FOREIGN KEY (VIN) REFERENCES PreownedVehicle(VIN) ON DELETE CASCADE,
+    -- FOREIGN KEY (VIN) REFERENCES PreownedVehicle(VIN) ON DELETE CASCADE,
+    FOREIGN KEY (VIN) REFERENCES Vehicle(VIN) ON DELETE CASCADE, -- SEE COMMENTS IN DRAW.IO
     mech_condition VARCHAR(10) CHECK (mech_condition IN ('poor', 'fair', 'good', 'excellent')),
     body_condition VARCHAR(10) CHECK (body_condition IN ('poor', 'fair', 'good', 'excellent')),
     tradeInValue DECIMAL(8,0) CHECK (tradeInValue > 0),
@@ -81,16 +82,16 @@ CREATE TABLE Images (
 -- For second approach we assume the dealership will take the minimum required details for the Person superclass (email, name, mobile)
 CREATE TABLE TestDrive (
     VIN CHAR(17) NOT NULL,
-    customerId INT NOT NULL,
-    -- personId INT NOT NULL, -- if we use this approach delete customerId and uncomment this line.
+    -- customerId INT NOT NULL,
+    personId INT NOT NULL, -- if we use this approach delete customerId and uncomment this line.
     salesPersonId INT NOT NULL,
     testDate DATE NOT NULL,
     testTime TIME NOT NULL,
     feedback VARCHAR(255),
     PRIMARY KEY (VIN, testDate, testTime),
     FOREIGN KEY (VIN) REFERENCES Vehicle(VIN),
-    FOREIGN KEY (customerId) REFERENCES Customer(pid),
-    -- FOREIGN KEY (personId) REFERENCES Person(pid), -- if we use this approach delete customerId FK and uncomment this line.
+    -- FOREIGN KEY (customerId) REFERENCES Customer(pid),
+    FOREIGN KEY (personId) REFERENCES Person(pid), -- if we use this approach delete customerId FK and uncomment this line.
     FOREIGN KEY (salesPersonId) REFERENCES SalesPerson(pid)
 );
 
@@ -167,8 +168,8 @@ BEGIN
   SELECT COUNT(*) 
     INTO option_count
     FROM IsAddedTo
-    WHERE "saleDate" = NEW."saleDate"
-    AND "customerId" = NEW."customerId";
+    WHERE saleDate = NEW.saleDate
+    AND customerId = NEW.customerId;
 
   IF option_count >= 8 THEN
     RAISE EXCEPTION 'Cannot add more than 8 AfterMarketOptions per Sale.';
@@ -192,7 +193,7 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1
     FROM NewVehicle
-    WHERE "VIN" = NEW."VIN"
+    WHERE VIN = NEW.VIN
   ) THEN
     RAISE EXCEPTION 'AfterMarketOptions are only allowed for new-vehicle Sales.';
   END IF;
@@ -213,19 +214,24 @@ CREATE OR REPLACE FUNCTION trig_move_new_vehicle_to_preowned_func()
 RETURNS TRIGGER AS $$
 BEGIN
   -- Only run if the Sale is newly sold or updated to sold.
-  IF NEW."soldStatus" = TRUE THEN
+  IF NEW.soldStatus = TRUE THEN
     IF EXISTS (
       SELECT 1
       FROM NewVehicle
-      WHERE "VIN" = NEW."saleVIN"
+      WHERE VIN = NEW.saleVIN
     ) THEN
       -- Remove from NewVehicle
       DELETE FROM NewVehicle
-      WHERE "VIN" = NEW."saleVIN";
+      WHERE VIN = NEW.saleVIN;
 
       -- Insert into PreownedVehicle
-      INSERT INTO PreownedVehicle ("VIN", "pre_owner")
-      VALUES (NEW."saleVIN", 'Dealership');
+      INSERT INTO PreownedVehicle (VIN, pre_owner)
+      VALUES (NEW.saleVIN, 'Dealership');
+
+      -- Update the master Vehicle table to set that VIN as sold
+      UPDATE Vehicle
+      SET soldStatus = True
+      WHERE VIN = NEW.saleVIN;
     END IF;
   END IF;
 
@@ -245,23 +251,23 @@ EXECUTE FUNCTION trig_move_new_vehicle_to_preowned_func();
 CREATE OR REPLACE FUNCTION trig_add_traded_in_vehicle_to_preowned_func()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW."tradedInVIN" IS NOT NULL THEN
+  IF NEW.tradedInVIN IS NOT NULL THEN
     -- If it's not already in PreownedVehicle, insert it
     IF NOT EXISTS (
       SELECT 1 
       FROM PreownedVehicle
-      WHERE "VIN" = NEW."tradedInVIN"
+      WHERE VIN = NEW.tradedInVIN
     ) THEN
       -- Insert the newly traded-in vehicle into PreownedVehicle
-      INSERT INTO PreownedVehicle ("VIN", "pre_owner")
-        SELECT t."VIN", t."registeredName"
+      INSERT INTO PreownedVehicle (VIN, pre_owner)
+        SELECT t.VIN, t.registeredName
         FROM TradedInVehicle t
-        WHERE t."VIN" = NEW."tradedInVIN";
+        WHERE t.VIN = NEW.tradedInVIN;
 
       -- Update the master Vehicle table to set that VIN as unsold
       UPDATE Vehicle
-      SET "soldStatus" = false
-      WHERE "VIN" = NEW."tradedInVIN";
+      SET soldStatus = false
+      WHERE VIN = NEW.tradedInVIN;
     END IF;
   END IF;
 
@@ -287,7 +293,7 @@ BEGIN
     SELECT COUNT(*)
       INTO sale_count
       FROM Sale
-     WHERE "customerId" = NEW."pid";
+     WHERE customerId = NEW.pid;
 
     IF sale_count = 0 THEN
         RAISE EXCEPTION 'Customer % must have at least one vehicle purchase record.', NEW."pid";
@@ -305,31 +311,7 @@ EXECUTE FUNCTION check_customer_has_sale();
 
 -- To ensure a customer has taken a test drive before a customer record is created.
 -- REMOVE IF CHANGING APPROACH TO USE THE BELOW COMMENT OUT INSTEAD
-CREATE OR REPLACE FUNCTION check_customer_has_testdrive()
-RETURNS TRIGGER AS $$
-DECLARE
-    testdrive_count INT;
-BEGIN
-    SELECT COUNT(*)
-      INTO testdrive_count
-      FROM TestDrive
-     WHERE "customerId" = NEW."pid";
-
-    IF testdrive_count = 0 THEN
-        RAISE EXCEPTION 'Customer % must test drive at least one vehicle.', NEW."pid";
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE CONSTRAINT TRIGGER cst_customer_has_testdrive
-AFTER INSERT OR UPDATE ON Customer
-DEFERRABLE INITIALLY DEFERRED
-FOR EACH ROW
-EXECUTE FUNCTION check_customer_has_testdrive();
-
--- CREATE OR REPLACE FUNCTION check_person_testdrives_before_customer()
+-- CREATE OR REPLACE FUNCTION check_customer_has_testdrive()
 -- RETURNS TRIGGER AS $$
 -- DECLARE
 --     testdrive_count INT;
@@ -337,20 +319,44 @@ EXECUTE FUNCTION check_customer_has_testdrive();
 --     SELECT COUNT(*)
 --       INTO testdrive_count
 --       FROM TestDrive
---      WHERE "personId" = NEW."pid";
+--      WHERE "customerId" = NEW."pid";
 
 --     IF testdrive_count = 0 THEN
---         RAISE EXCEPTION 
---           'Person % must have at least one TestDrive record before becoming a Customer.', 
---           NEW."pid";
+--         RAISE EXCEPTION 'Customer % must test drive at least one vehicle.', NEW."pid";
 --     END IF;
 
 --     RETURN NEW;
 -- END;
 -- $$ LANGUAGE plpgsql;
 
--- CREATE CONSTRAINT TRIGGER cst_person_testdrives
--- AFTER INSERT ON Customer
+-- CREATE CONSTRAINT TRIGGER cst_customer_has_testdrive
+-- AFTER INSERT OR UPDATE ON Customer
 -- DEFERRABLE INITIALLY DEFERRED
 -- FOR EACH ROW
--- EXECUTE FUNCTION check_person_testdrives_before_customer();
+-- EXECUTE FUNCTION check_customer_has_testdrive();
+
+CREATE OR REPLACE FUNCTION check_person_testdrives_before_customer()
+RETURNS TRIGGER AS $$
+DECLARE
+    testdrive_count INT;
+BEGIN
+    SELECT COUNT(*)
+      INTO testdrive_count
+      FROM TestDrive
+     WHERE personId = NEW.pid;
+
+    IF testdrive_count = 0 THEN
+        RAISE EXCEPTION 
+          'Person % must have at least one TestDrive record before becoming a Customer.', 
+          NEW.pid;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE CONSTRAINT TRIGGER cst_person_testdrives
+AFTER INSERT ON Customer
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+EXECUTE FUNCTION check_person_testdrives_before_customer();
