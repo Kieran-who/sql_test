@@ -271,3 +271,58 @@ CREATE TRIGGER trig_add_traded_in_vehicle_to_preowned
 AFTER INSERT OR UPDATE ON Sale
 FOR EACH ROW
 EXECUTE FUNCTION trig_add_traded_in_vehicle_to_preowned_func();
+
+-- A customer must be associated with at least one vehicle purchase record
+-- This trigger is fired AFTER a row is inserted or updated in Customer. It is checked at the end of the transaction
+-- It needs to be fired after otherwise, we would never be able to insert a Customer and its corresponding Sale within the same transaction
+-- i.e. if a new customer we need to create the customer in the same transaction as a sale so that a customer record is associated with a sale.
+-- as we have customerId as part of the PK of sale, customer must first be inserted, then sale, then the deferred checks run.
+CREATE OR REPLACE FUNCTION check_customer_has_sale()
+RETURNS TRIGGER AS $$
+DECLARE
+    sale_count INT;
+BEGIN
+    SELECT COUNT(*)
+      INTO sale_count
+      FROM Sale
+     WHERE "customerId" = NEW."pid";
+
+    IF sale_count = 0 THEN
+        RAISE EXCEPTION 'Customer % must have at least one vehicle purchase record.', NEW."pid";
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE CONSTRAINT TRIGGER cst_customer_has_sale
+AFTER INSERT OR UPDATE ON Customer
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+EXECUTE FUNCTION check_customer_has_sale();
+
+-- To ensure a customer has taken a test drive before a customer record is created.
+-- UPDATE THIS IF CHANGING APPROACH TO CUSTOMER / TEST DRIVE LOGIC!!!
+CREATE OR REPLACE FUNCTION check_customer_has_testdrive()
+RETURNS TRIGGER AS $$
+DECLARE
+    testdrive_count INT;
+BEGIN
+    SELECT COUNT(*)
+      INTO testdrive_count
+      FROM TestDrive
+     WHERE "customerId" = NEW."pid";
+
+    IF testdrive_count = 0 THEN
+        RAISE EXCEPTION 'Customer % must test drive at least one vehicle.', NEW."pid";
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE CONSTRAINT TRIGGER cst_customer_has_testdrive
+AFTER INSERT OR UPDATE ON Customer
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+EXECUTE FUNCTION check_customer_has_testdrive();
