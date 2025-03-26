@@ -1,5 +1,19 @@
 -- TODO: test below; INSERT statements with test data
 
+-- Vehicle (supertype)
+CREATE TABLE Vehicle (
+    VIN CHAR(17) NOT NULL PRIMARY KEY,
+    make VARCHAR(50) NOT NULL,
+    model VARCHAR(50) NOT NULL,
+    year INT NOT NULL,
+    odometer INT CHECK (odometer >= 0),
+    colour VARCHAR(50) NOT NULL,
+    transmissionType VARCHAR(50) NOT NULL,
+    soldStatus BOOLEAN DEFAULT false, -- false: still available for sale, true: sold
+    price DECIMAL(8,0) CHECK (price > 0),
+    description VARCHAR(255)
+);
+
 -- Supertype for persons
 CREATE TABLE Person (
     pid INT NOT NULL PRIMARY KEY,
@@ -17,6 +31,19 @@ CREATE TABLE SalesPerson (
     commissionRate DECIMAL(5,2) CHECK (commissionRate > 0 AND commissionRate < 0.1)
     );
 
+-- TestDrive
+CREATE TABLE TestDrive (
+    tid INT NOT NULL PRIMARY KEY,
+    VIN CHAR(17) NOT NULL,    
+    testerEmail VARCHAR(100) NOT NULL,
+    salesPersonId INT NOT NULL,
+    testDate DATE NOT NULL,
+    testTime TIME NOT NULL,
+    feedback VARCHAR(255),    
+    FOREIGN KEY (VIN) REFERENCES Vehicle(VIN),
+    FOREIGN KEY (salesPersonId) REFERENCES SalesPerson(pid)
+);
+
 -- Customer (subtype of Person)
 CREATE TABLE Customer (
     pid INT NOT NULL PRIMARY KEY,
@@ -32,20 +59,6 @@ CREATE TABLE Customer (
     state VARCHAR(50) NOT NULL,
     postcode CHAR(4) NOT NULL, -- Aus post codes are 4 digits
     country CHAR(2) NOT NULL -- assumed we can just use 2 digit country codes here??
-);
-
--- Vehicle (supertype)
-CREATE TABLE Vehicle (
-    VIN CHAR(17) NOT NULL PRIMARY KEY,
-    make VARCHAR(50) NOT NULL,
-    model VARCHAR(50) NOT NULL,
-    year INT NOT NULL,
-    odometer INT CHECK (odometer >= 0),
-    colour VARCHAR(50) NOT NULL,
-    transmissionType VARCHAR(50) NOT NULL,
-    soldStatus BOOLEAN DEFAULT false, -- false: still available for sale, true: sold
-    price DECIMAL(8,0) CHECK (price > 0),
-    description VARCHAR(255)
 );
 
 -- NewVehicle (subtype of Vehicle)
@@ -78,22 +91,6 @@ CREATE TABLE Images (
     PRIMARY KEY (VIN, imgLink),
     FOREIGN KEY (VIN) REFERENCES Vehicle(VIN) ON DELETE CASCADE
 );
-
--- TestDrive
-CREATE TABLE TestDrive (
-    tid INT NOT NULL PRIMARY KEY,
-    VIN CHAR(17) NOT NULL,    
-    testerEmail VARCHAR(100) NOT NULL,
-    salesPersonId INT NOT NULL,
-    testDate DATE NOT NULL,
-    testTime TIME NOT NULL,
-    feedback VARCHAR(255),    
-    FOREIGN KEY (VIN) REFERENCES Vehicle(VIN),
-    -- FOREIGN KEY (customerId) REFERENCES Customer(pid),
-    FOREIGN KEY (personId) REFERENCES Person(pid), -- if we use this approach delete customerId FK and uncomment this line.
-    FOREIGN KEY (salesPersonId) REFERENCES SalesPerson(pid)
-);
-
 -- Sale
 CREATE TABLE Sale (
     customerId INT NOT NULL,
@@ -253,8 +250,7 @@ BEGIN
       UPDATE Vehicle
       SET soldStatus = false
       WHERE VIN = NEW.tradedInVIN;
-    END IF;
-  END IF;
+    END IF;  
 
   RETURN NEW;
 END;
