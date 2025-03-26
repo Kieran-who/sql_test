@@ -21,6 +21,8 @@ CREATE TABLE SalesPerson (
 CREATE TABLE Customer (
     pid INT NOT NULL PRIMARY KEY,
     FOREIGN KEY (pid) REFERENCES Person(pid) ON DELETE CASCADE,
+    testDriveId INT NOT NULL,
+    FOREIGN KEY (testDriveId) REFERENCES TestDrive(tid),
     driversLicence VARCHAR(50) NOT NULL UNIQUE, -- Didn't specify licence as PK as I believe the pk needs to be the same as the Person superclass
     apartmentNo VARCHAR(10),
     streetNo VARCHAR(10),
@@ -62,8 +64,7 @@ CREATE TABLE PreownedVehicle (
 -- TradedInVehicle (subtype of PreownedVehicle)
 CREATE TABLE TradedInVehicle (
     VIN CHAR(17) NOT NULL PRIMARY KEY,
-    -- FOREIGN KEY (VIN) REFERENCES PreownedVehicle(VIN) ON DELETE CASCADE,
-    FOREIGN KEY (VIN) REFERENCES Vehicle(VIN) ON DELETE CASCADE, -- SEE COMMENTS IN DRAW.IO
+    FOREIGN KEY (VIN) REFERENCES PreownedVehicle(VIN) ON DELETE CASCADE,    
     mech_condition VARCHAR(10) CHECK (mech_condition IN ('poor', 'fair', 'good', 'excellent')),
     body_condition VARCHAR(10) CHECK (body_condition IN ('poor', 'fair', 'good', 'excellent')),
     tradeInValue DECIMAL(8,0) CHECK (tradeInValue > 0),
@@ -79,20 +80,14 @@ CREATE TABLE Images (
 );
 
 -- TestDrive
--- For second approach we assume the dealership will take the minimum required details for the Person superclass (email, name, mobile)
 CREATE TABLE TestDrive (
-    VIN CHAR(17) NOT NULL,
-    ------------------------------------------------------------
-    -- TO DECIDE BEST APPROACH FOR STORING TEST DRIVER'S DETAILS
-    ------------------------------------------------------------
-    -- customerId INT NOT NULL,
-    -- personId INT NOT NULL,
-    -- testerEmail VARCHAR(100) NOT NULL,
+    tid INT NOT NULL PRIMARY KEY,
+    VIN CHAR(17) NOT NULL,    
+    testerEmail VARCHAR(100) NOT NULL,
     salesPersonId INT NOT NULL,
     testDate DATE NOT NULL,
     testTime TIME NOT NULL,
-    feedback VARCHAR(255),
-    PRIMARY KEY (VIN, testDate, testTime),
+    feedback VARCHAR(255),    
     FOREIGN KEY (VIN) REFERENCES Vehicle(VIN),
     -- FOREIGN KEY (customerId) REFERENCES Customer(pid),
     FOREIGN KEY (personId) REFERENCES Person(pid), -- if we use this approach delete customerId FK and uncomment this line.
@@ -310,42 +305,3 @@ AFTER INSERT OR UPDATE ON Customer
 DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW
 EXECUTE FUNCTION check_customer_has_sale();
-
---------------------------------------------------------
--- TEST whether associated test drive record exists
--- TO UPDATE BASED ON HOW WE HANDLE TESTDRIVE
--- Below example works for storing email in testDrive
---------------------------------------------------------
-CREATE OR REPLACE FUNCTION check_person_testdrives_before_customer()
-RETURNS TRIGGER AS $$
-DECLARE
-    person_email VARCHAR(100);
-    testdrive_count INT;
-BEGIN
-    -- Fetch the email of the Person row associated with the new Customer (stores as person_email var)
-    SELECT email 
-      INTO person_email
-      FROM Person
-     WHERE pid = NEW.pid;
-
-    -- Check if there's a test drive record with that email
-    SELECT COUNT(*)
-      INTO testdrive_count
-      FROM TestDrive
-     WHERE testerEmail = person_email;
-
-    IF testdrive_count = 0 THEN
-        RAISE EXCEPTION
-          'Person % (email: %) must have at least one TestDrive record before becoming a Customer.', 
-           NEW.pid, person_email;
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE CONSTRAINT TRIGGER cst_person_testdrives
-AFTER INSERT ON Customer
-DEFERRABLE INITIALLY DEFERRED
-FOR EACH ROW
-EXECUTE FUNCTION check_person_testdrives_before_customer();
