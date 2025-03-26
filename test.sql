@@ -80,8 +80,7 @@ CREATE TABLE TradedInVehicle (
     FOREIGN KEY (VIN) REFERENCES PreownedVehicle(VIN) ON DELETE CASCADE,    
     mech_condition VARCHAR(10) CHECK (mech_condition IN ('poor', 'fair', 'good', 'excellent')),
     body_condition VARCHAR(10) CHECK (body_condition IN ('poor', 'fair', 'good', 'excellent')),
-    tradeInValue DECIMAL(8,0) CHECK (tradeInValue > 0),
-    registeredName VARCHAR(100) NOT NULL -- added this
+    tradeInValue DECIMAL(8,0) CHECK (tradeInValue > 0)
 );
 
 -- ImageGallery (stores images for a given vehicle)
