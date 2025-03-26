@@ -241,27 +241,15 @@ AFTER INSERT OR UPDATE ON Sale
 FOR EACH ROW
 EXECUTE FUNCTION trig_move_new_vehicle_to_preowned_func();
 
--- Trigger to add tradedInVehicle to preowned with insert of Sale (referencing line from assignment description -> 'We assume that once the vehicle is traded in, it will be put on sale immediately')
--- Here we assume that on sale, we want to move the tradedInVehicle into the pre_owned vehicle list (be we ensure to only do that if not already present, i.e. in the case it was moved on insert and then an update retriggers logic)
+-- Trigger to add update tradedInVehicle's vehicle status to not sold with insert of Sale (referencing line from assignment description -> 'We assume that once the vehicle is traded in, it will be put on sale immediately')
+-- Here tradedInVehicle is already a subclass of pre_owned_vehicle
 -- We trigger on insert and sale in the edge case that a sale record is updated at a later stage to include the tradedInVehicle
 -- We also assume that the dealership wants to maintain a record of tradedInVehicles (i.e. instead of deleting them from the db)
 CREATE OR REPLACE FUNCTION trig_add_traded_in_vehicle_to_preowned_func()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.tradedInVIN IS NOT NULL THEN
-    -- If it's not already in PreownedVehicle, insert it
-    IF NOT EXISTS (
-      SELECT 1 
-      FROM PreownedVehicle
-      WHERE VIN = NEW.tradedInVIN
-    ) THEN
-      -- Insert the newly traded-in vehicle into PreownedVehicle
-      INSERT INTO PreownedVehicle (VIN, pre_owner)
-        SELECT t.VIN, t.registeredName
-        FROM TradedInVehicle t
-        WHERE t.VIN = NEW.tradedInVIN;
-
-      -- Update the master Vehicle table to set that VIN as unsold
+  IF NEW.tradedInVIN IS NOT NULL THEN              
+      -- Update the superclass Vehicle table to set that VIN as unsold
       UPDATE Vehicle
       SET soldStatus = false
       WHERE VIN = NEW.tradedInVIN;
