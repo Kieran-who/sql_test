@@ -113,6 +113,7 @@ CREATE TABLE Payment (
     customerId INT NOT NULL,
     saleDate DATE NOT NULL,
     instalmentNo INT GENERATED ALWAYS AS IDENTITY, -- I believe this statement ensures the instalmentNo is generated automatically (but should definitely test, as not sure if it increments starting at 1 or if random, etc...)
+    paymentDate DATE NOT NULL,
     amount DECIMAL(10,2) CHECK (amount > 0),
     type VARCHAR(15) CHECK (type IN ('cash','credit card','bank transfer','bank financing')),
     PRIMARY KEY (customerId, saleDate, instalmentNo),
