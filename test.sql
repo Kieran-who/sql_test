@@ -77,7 +77,8 @@ CREATE TABLE PreownedVehicle (
 -- TradedInVehicle (subtype of PreownedVehicle)
 CREATE TABLE TradedInVehicle (
     VIN CHAR(17) NOT NULL PRIMARY KEY,
-    FOREIGN KEY (VIN) REFERENCES PreownedVehicle(VIN) ON DELETE CASCADE,    
+    -- As TradedInVehicle is subclass of PreownedVehicle we set ON DELETE CASCADE as no instances where the subclass should exist without the superclass item
+    FOREIGN KEY (VIN) REFERENCES PreownedVehicle(VIN) ON DELETE CASCADE,   
     mech_condition VARCHAR(10) CHECK (mech_condition IN ('poor', 'fair', 'good', 'excellent')),
     body_condition VARCHAR(10) CHECK (body_condition IN ('poor', 'fair', 'good', 'excellent')),
     tradeInValue DECIMAL(8,0) CHECK (tradeInValue > 0)
@@ -88,6 +89,7 @@ CREATE TABLE Images (
     VIN CHAR(17) NOT NULL,
     imgLink VARCHAR(255) NOT NULL,
     PRIMARY KEY (VIN, imgLink),
+    -- As these images are related purely to a specific vehicle only, if that vehicle is deleted, images should also be deleted.
     FOREIGN KEY (VIN) REFERENCES Vehicle(VIN) ON DELETE CASCADE
 );
 -- Sale
@@ -111,11 +113,13 @@ CREATE TABLE Sale (
 CREATE TABLE Payment (
     customerId INT NOT NULL,
     saleDate DATE NOT NULL,
-    instalmentNo INT GENERATED ALWAYS AS IDENTITY, -- I believe this statement ensures the instalmentNo is generated automatically (but should definitely test, as not sure if it increments starting at 1 or if random, etc...)
+    -- Auto increment the payment identity
+    instalmentNo INT GENERATED ALWAYS AS IDENTITY,
     paymentDate DATE NOT NULL,
     amount DECIMAL(10,2) CHECK (amount > 0),
     type VARCHAR(15) CHECK (type IN ('cash','credit card','bank transfer','bank financing')),
     PRIMARY KEY (customerId, saleDate, instalmentNo),
+    -- As payment is a weak entity, any entries should be deleted if the strong entity is deleted.
     FOREIGN KEY (customerId, saleDate) REFERENCES Sale(customerId, saleDate) ON DELETE CASCADE
 );
 
@@ -130,6 +134,7 @@ CREATE TABLE BankLoan (
     loanValue DECIMAL(10,2) NOT NULL CHECK (loanValue > 0),
     proofPresented BOOLEAN DEFAULT false, -- false: proof not presented, true: proof presented
     PRIMARY KEY (customerId, saleDate),
+    -- As BankLoan is tied purely to a sale, if the sale is deleted so too should the associated BankLoan row.
     FOREIGN KEY (customerId, saleDate) REFERENCES Sale(customerId, saleDate) ON DELETE CASCADE
 );
 
@@ -149,6 +154,7 @@ CREATE TABLE IsAddedTo (
     cost DECIMAL(10,2) CHECK (cost > 0),
     PRIMARY KEY (optionId, saleDate, customerId),
     FOREIGN KEY (optionId) REFERENCES AfterMarketOption(optionId),
+    -- As IsAddedTo is tied purely to a sale, if the sale is deleted so too should the associated IsAddedTo row/s.
     FOREIGN KEY (customerId, saleDate) REFERENCES Sale(customerId, saleDate) ON DELETE CASCADE,
     FOREIGN KEY (VIN) REFERENCES NewVehicle(VIN)    
 );
