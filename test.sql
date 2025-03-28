@@ -1,5 +1,3 @@
--- TODO: test below; INSERT statements with test data
-
 -- Vehicle (supertype)
 -- We have a vehicle supertype as the following attributes are shared across preowned and new vehicles
 CREATE TABLE Vehicle (
@@ -310,3 +308,7 @@ AFTER INSERT OR UPDATE ON Customer
 DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW
 EXECUTE FUNCTION check_customer_has_sale();
+
+------------------------------------------------------------------------------
+-- INSERT STATEMENTS
+------------------------------------------------------------------------------
