@@ -1,6 +1,7 @@
 -- TODO: test below; INSERT statements with test data
 
 -- Vehicle (supertype)
+-- We have a vehicle supertype as the following attributes are shared across preowned and new vehicles
 CREATE TABLE Vehicle (
     VIN CHAR(17) NOT NULL PRIMARY KEY,
     make VARCHAR(50) NOT NULL,
@@ -15,6 +16,7 @@ CREATE TABLE Vehicle (
 );
 
 -- Supertype for persons
+-- We use a supertype as there are two subtypes (customer and salesperson) who share these attributes
 CREATE TABLE Person (
     pid INT NOT NULL PRIMARY KEY,
     firstName VARCHAR(50) NOT NULL,
@@ -26,6 +28,7 @@ CREATE TABLE Person (
 -- SalesPerson (subtype of Person)
 CREATE TABLE SalesPerson (
     pid INT NOT NULL PRIMARY KEY,
+    -- when superclass deleted, so too should the subclass
     FOREIGN KEY (pid) REFERENCES Person(pid) ON DELETE CASCADE,
     grossSalary DECIMAL(10,2) CHECK (grossSalary > 0),
     commissionRate DECIMAL(5,2) CHECK (commissionRate > 0 AND commissionRate < 0.1)
@@ -45,8 +48,13 @@ CREATE TABLE TestDrive (
 );
 
 -- Customer (subtype of Person)
+-- Customer is created after TestDrive as we have a customer FK attribe pointing to TestDrive
+-- We have the testDriveId FK to satisfy the condition that a customer must have a TestDrive (this must be included in the insert statement)
+-- A customer can only be created with a sale record. We ensure this constraint by the check_customer_has_sale() explained below
+-- As a customer can only created with a sale record, it must be inserted in the same transaction as a sale
 CREATE TABLE Customer (
     pid INT NOT NULL PRIMARY KEY,
+    -- when superclass deleted, so too should the subclass
     FOREIGN KEY (pid) REFERENCES Person(pid) ON DELETE CASCADE,
     testDriveId INT NOT NULL,
     FOREIGN KEY (testDriveId) REFERENCES TestDrive(tid),
@@ -62,12 +70,14 @@ CREATE TABLE Customer (
 );
 
 -- NewVehicle (subtype of Vehicle)
+-- We have a seperate table for NewVehicle to track the addition of aftermarket options which can only be applied to new vehicles
 CREATE TABLE NewVehicle (
     VIN CHAR(17) NOT NULL PRIMARY KEY,
     FOREIGN KEY (VIN) REFERENCES Vehicle(VIN) ON DELETE CASCADE
 );
 
 -- PreownedVehicle (subtype of Vehicle)
+-- Preowned has the additional attribute of pre_owner
 CREATE TABLE PreownedVehicle (
     VIN CHAR(17) NOT NULL PRIMARY KEY,
     FOREIGN KEY (VIN) REFERENCES Vehicle(VIN) ON DELETE CASCADE,
@@ -75,6 +85,8 @@ CREATE TABLE PreownedVehicle (
 );
 
 -- TradedInVehicle (subtype of PreownedVehicle)
+-- We set the TradedInVehicle as a subclass of PreownedVehicle as logically, it made more sense as a TradedInVehicle is always going to be PreownedVehicle
+-- When a sale completes with a reference to a TradedInVehicle there is a trigger (trig_move_new_vehicle_to_preowned_func) that updates the relevant records to note this vehicle is for sale (as per the requirements)
 CREATE TABLE TradedInVehicle (
     VIN CHAR(17) NOT NULL PRIMARY KEY,
     -- As TradedInVehicle is subclass of PreownedVehicle we set ON DELETE CASCADE as no instances where the subclass should exist without the superclass item
@@ -84,7 +96,7 @@ CREATE TABLE TradedInVehicle (
     tradeInValue DECIMAL(8,0) CHECK (tradeInValue > 0)
 );
 
--- ImageGallery (stores images for a given vehicle)
+-- ImageGallery (stores images for a given vehicle as there can be many)
 CREATE TABLE Images (
     VIN CHAR(17) NOT NULL,
     imgLink VARCHAR(255) NOT NULL,
@@ -92,7 +104,10 @@ CREATE TABLE Images (
     -- As these images are related purely to a specific vehicle only, if that vehicle is deleted, images should also be deleted.
     FOREIGN KEY (VIN) REFERENCES Vehicle(VIN) ON DELETE CASCADE
 );
+
 -- Sale
+-- It is assumed that sale records should not be deleted so there are no ON DELETE CASCADE clauses set, application logic can handle this if necessary
+-- The PK of custeromID and saleDate ensures that only a customer can only participate in one sale per day
 CREATE TABLE Sale (
     customerId INT NOT NULL,
     saleDate DATE NOT NULL,
@@ -146,6 +161,8 @@ CREATE TABLE AfterMarketOption (
 );
 
 -- IsAddedTo
+-- We check that there are no more than 8 IsAddedTo rows for each sale using the trigger check_max_options_func
+-- We also have another trigger (check_new_vehicle_only_func) which ensures AfterMarketOption are associated with sales involving new cars
 CREATE TABLE IsAddedTo (
     optionId INT NOT NULL,
     saleDate DATE NOT NULL,
@@ -184,9 +201,8 @@ BEFORE INSERT ON IsAddedTo
 FOR EACH ROW
 EXECUTE FUNCTION check_max_options_func();
 
--- Constrain the addition of Aftermarket options to vehicles without pre_owner attribute
--- We have a seperate new vehicle table with just new vehicles so we can do a lookup to see if the sale's vin exists in that table
--- If not, we prevent the insert
+-- Constrain the addition of Aftermarket options to new vehicles
+-- We have a seperate new vehicle table with just new vehicles so we can do a lookup to see if the sale's VIN exists in that table. If not, we prevent the insert
 CREATE OR REPLACE FUNCTION check_new_vehicle_only_func()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -207,9 +223,9 @@ BEFORE INSERT ON IsAddedTo
 FOR EACH ROW
 EXECUTE FUNCTION check_new_vehicle_only_func();
 
--- To ensure the above trigger works consistently (checkNewVehicleOnly), we need to ensure any new sold vehicles are removed from the new vehicle table to the previous owned table
--- We are assuming here that the dealership still wants to record a history of sold vehicles (as opposed to just deleting from the db)
--- We can add pre_owned here also
+-- To ensure the above trigger works consistently (checkNewVehicleOnly), we need to ensure any new sold vehicles are removed from the new vehicle table.
+-- We are assuming here that the dealership still wants to record a history of sold vehicles (as opposed to just deleting from the db) so we move it to the PreownedVehicle table
+-- We can add pre_owned here also (set as 'Dealership' which is the previous owner once a new vehicle is sold)
 CREATE OR REPLACE FUNCTION trig_move_new_vehicle_to_preowned_func()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -244,9 +260,8 @@ AFTER INSERT OR UPDATE ON Sale
 FOR EACH ROW
 EXECUTE FUNCTION trig_move_new_vehicle_to_preowned_func();
 
--- Trigger to add update tradedInVehicle's vehicle status to not sold with insert of Sale (referencing line from assignment description -> 'We assume that once the vehicle is traded in, it will be put on sale immediately')
--- Here tradedInVehicle is already a subclass of pre_owned_vehicle
--- We trigger on insert and sale in the edge case that a sale record is updated at a later stage to include the tradedInVehicle
+-- Trigger to update tradedInVehicle's vehicle status to not sold with insert of Sale (referencing line from assignment description -> 'We assume that once the vehicle is traded in, it will be put on sale immediately')
+-- We trigger on INSERT and UPDATE in the edge case that a sale record is updated at a later stage to include the tradedInVehicle
 -- We also assume that the dealership wants to maintain a record of tradedInVehicles (i.e. instead of deleting them from the db)
 CREATE OR REPLACE FUNCTION trig_add_traded_in_vehicle_to_preowned_func()
 RETURNS TRIGGER AS $$
@@ -268,10 +283,9 @@ FOR EACH ROW
 EXECUTE FUNCTION trig_add_traded_in_vehicle_to_preowned_func();
 
 -- A customer must be associated with at least one vehicle purchase record
--- This trigger is fired AFTER a row is inserted or updated in Customer. It is checked at the end of the transaction
+-- This trigger is fired AFTER a row is inserted or updated in Customer. It is checked at the end of the transaction.
 -- It needs to be fired after otherwise, we would never be able to insert a Customer and its corresponding Sale within the same transaction
--- i.e. if a new customer we need to create the customer in the same transaction as a sale so that a customer record is associated with a sale.
--- as we have customerId as part of the PK of sale, customer must first be inserted, then sale, then the deferred checks run.
+-- As we have customerId as part of the PK of sale, customer must first be inserted, then sale, then the deferred checks run.
 CREATE OR REPLACE FUNCTION check_customer_has_sale()
 RETURNS TRIGGER AS $$
 DECLARE
