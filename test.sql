@@ -1,3 +1,5 @@
+-- TODO: test below; INSERT statements with test data
+
 -- Vehicle (supertype)
 -- We have a vehicle supertype as the following attributes are shared across preowned and new vehicles
 CREATE TABLE Vehicle (
@@ -84,6 +86,7 @@ CREATE TABLE PreownedVehicle (
 
 -- TradedInVehicle (subtype of PreownedVehicle)
 -- We set the TradedInVehicle as a subclass of PreownedVehicle as logically, it made more sense as a TradedInVehicle is always going to be PreownedVehicle
+-- A tradeinVehicle is only added to the db when a customer trades in their vehicle as part of a sale
 -- When a sale completes with a reference to a TradedInVehicle there is a trigger (trig_move_new_vehicle_to_preowned_func) that updates the relevant records to note this vehicle is for sale (as per the requirements)
 CREATE TABLE TradedInVehicle (
     VIN CHAR(17) NOT NULL PRIMARY KEY,
@@ -106,7 +109,6 @@ CREATE TABLE Images (
 -- Sale
 -- It is assumed that sale records should not be deleted so there are no ON DELETE CASCADE clauses set, application logic can handle this if necessary
 -- The PK of custeromID and saleDate ensures that only a customer can only participate in one sale per day
--- Final Sale Price can be fetched by app using the discountPrice, basePrice and price of any aftermarket options (meaning we have not included it as its own attribute)
 CREATE TABLE Sale (
     customerId INT NOT NULL,
     saleDate DATE NOT NULL,
@@ -265,7 +267,7 @@ EXECUTE FUNCTION trig_move_new_vehicle_to_preowned_func();
 CREATE OR REPLACE FUNCTION trig_add_traded_in_vehicle_to_preowned_func()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.tradedInVIN IS NOT NULL THEN              
+  IF NEW.tradedInVIN IS NOT NULL THEN
       -- Update the superclass Vehicle table to set that VIN as unsold
       UPDATE Vehicle
       SET soldStatus = false
@@ -309,6 +311,45 @@ DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW
 EXECUTE FUNCTION check_customer_has_sale();
 
-------------------------------------------------------------------------------
--- INSERT STATEMENTS
-------------------------------------------------------------------------------
+-- A tradedInVehicle must be registered to the buyer's name
+-- This means on the create of a tradedInVehicle, we need to check that the pre_owneded parent classes's pre_owner exists in the Customer table 
+-- and that the customerId is the same as the one in the Sale table
+CREATE OR REPLACE FUNCTION check_traded_in_vehicle_insert_update()
+RETURNS TRIGGER AS $$
+DECLARE
+    pre_owner_name VARCHAR(100);
+    matching_customer_count INT;
+BEGIN
+    -- Get the pre_owner name from the PreownedVehicle parent table
+    SELECT pre_owner INTO pre_owner_name
+    FROM PreownedVehicle
+    WHERE VIN = NEW.VIN;
+
+    IF pre_owner_name IS NULL THEN
+        RAISE EXCEPTION 'PreownedVehicle entry missing for VIN %', NEW.VIN;
+    END IF;
+
+    -- Check if there is at least one Sale where tradedInVIN matches NEW.VIN
+    -- and the customer associated with that sale matches pre_owner_name
+    SELECT COUNT(*)
+    INTO matching_customer_count
+    FROM Sale s
+    JOIN Customer c ON s.customerId = c.pid
+    JOIN Person p ON c.pid = p.pid
+    WHERE s.tradedInVIN = NEW.VIN
+      AND CONCAT(p.firstName, ' ', p.lastName) = pre_owner_name;
+
+    IF matching_customer_count = 0 THEN
+        RAISE EXCEPTION 'Traded-in vehicle % must have a corresponding Sale with matching customer name %', NEW.VIN, pre_owner_name;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger on TradedInVehicle to enforce this constraint
+CREATE CONSTRAINT TRIGGER trg_check_traded_in_vehicle_insert_update
+AFTER INSERT OR UPDATE ON TradedInVehicle
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+EXECUTE FUNCTION check_traded_in_vehicle_insert_update();
