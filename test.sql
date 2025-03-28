@@ -108,6 +108,7 @@ CREATE TABLE Images (
 -- Sale
 -- It is assumed that sale records should not be deleted so there are no ON DELETE CASCADE clauses set, application logic can handle this if necessary
 -- The PK of custeromID and saleDate ensures that only a customer can only participate in one sale per day
+-- Final Sale Price can be fetched by app using the discountPrice, basePrice and price of any aftermarket options (meaning we have not included it as its own attribute)
 CREATE TABLE Sale (
     customerId INT NOT NULL,
     saleDate DATE NOT NULL,
