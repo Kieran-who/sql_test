@@ -353,3 +353,7 @@ AFTER INSERT OR UPDATE ON TradedInVehicle
 DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW
 EXECUTE FUNCTION check_traded_in_vehicle_insert_update();
+
+------------------------------------------------------------------------------
+-- INSERTS BELOW
+------------------------------------------------------------------------------
