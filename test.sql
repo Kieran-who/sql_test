@@ -312,7 +312,7 @@ FOR EACH ROW
 EXECUTE FUNCTION check_customer_has_sale();
 
 -- A tradedInVehicle must be registered to the buyer's name
--- This means on the create of a tradedInVehicle, we need to check that the pre_owneded parent classes's pre_owner exists in the Customer table 
+-- This means on the create of a tradedInVehicle, we need to check that the pre_owned parent classes's pre_owner exists in the Customer table 
 -- and that the customerId is the same as the one in the Sale table
 CREATE OR REPLACE FUNCTION check_traded_in_vehicle_insert_update()
 RETURNS TRIGGER AS $$
