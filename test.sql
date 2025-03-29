@@ -140,7 +140,7 @@ CREATE TABLE Payment (
 );
 
 -- BankLoan
-CREATE TABLE BankLoan (
+CREATE TABLE BankFinancing (
     customerId INT NOT NULL,
     saleDate DATE NOT NULL,
     bank VARCHAR(50) NOT NULL,
