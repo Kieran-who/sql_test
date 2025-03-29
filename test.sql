@@ -1,5 +1,3 @@
--- TODO: test below; INSERT statements with test data
-
 -- Vehicle (supertype)
 -- We have a vehicle supertype as the following attributes are shared across preowned and new vehicles
 CREATE TABLE Vehicle (
