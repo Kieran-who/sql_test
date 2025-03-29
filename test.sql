@@ -58,7 +58,7 @@ CREATE TABLE Customer (
     FOREIGN KEY (pid) REFERENCES Person(pid) ON DELETE CASCADE,
     testDriveId INT NOT NULL,
     FOREIGN KEY (testDriveId) REFERENCES TestDrive(tid),
-    driversLicence VARCHAR(50) NOT NULL UNIQUE, -- Didn't specify licence as PK as I believe the pk needs to be the same as the Person superclass
+    driversLicence VARCHAR(50) NOT NULL UNIQUE,
     apartmentNo VARCHAR(10),
     streetNo VARCHAR(10),
     CHECK (apartmentNo IS NOT NULL OR streetNo IS NOT NULL), -- All addresses need to have either an apartment number or street number
